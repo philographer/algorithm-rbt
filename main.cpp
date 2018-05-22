@@ -41,7 +41,7 @@ public:
         this->info = NULL;
     }
     Node(int key, Node* _left = NULL, Node* _right = NULL, Info* _info = NULL) {
-        this->key = key; // ==
+        this->key = key;
         this->left = _left;
         this->right = _right;
         this->color = RED;
@@ -130,6 +130,10 @@ public:
         node->color = c;
     }
     
+    void setInfo(Info* _info) {
+        info = _info;
+    }
+    
 private:
     int key; // 회원의 키는 회원번호가 된다.
     Node* left;
@@ -152,6 +156,11 @@ public:
 };
 
 struct Changed { // 금액변동내역
+public:
+    Changed(int _type, int _howManyMoney) {
+        type = _type;
+        howManyMoney = _howManyMoney;
+    }
     int type; // 변동 종류: 현재금액 증가, 감소를 표현한 정수 (증가: 1, 감소: 0)
     int howManyMoney; // 변동 금액 : 1 ~ 5,000,000 사이의 임의의 정수
 };
@@ -167,6 +176,17 @@ public:
         money = NULL;
         change = vector<Changed>();
     }
+    void addToChange(int _moneyChange) {
+        int type = -1;
+        int moneyChange = _moneyChange;
+        if(moneyChange > 0) {
+            type = 1;
+        } else {
+            type = 0;
+            moneyChange *= -1;
+        }
+        change.push_back(Changed(type, moneyChange));
+    }
     int account_num; // 회원번호: 1,000,000 ~ 1,999,999 사이의 정수, (기준키, 유일함)
     string name; // 회원이름: 공백 없는 20Byte 이내의 문자열. 예) “김인하”
     string phone; // 연락처: 회원의 전화번호(공백 없는 11Byte 이내의 문자열). 예) “01012345678”
@@ -174,6 +194,24 @@ public:
     int grade; // 회원등급: 현재 금액에 따른 0 ~ 3 사이의 임의의 정수. (0: 일반, 1: 실버, 2: 골드, 3: 다이아), (현재금액에 대한 회원등급 - 일반: 0 , 실버: 30,000, 골드: 50,000, 다이아: 100,000)
     int money; // 현재금액: 0 ~ 100,000,000 사이의 정수
     vector<Changed> change;
+    
+    void setMoney(int newMoney) {
+        money = newMoney;
+    }
+    
+    void validateGrade() {
+        if(money < 30000) {
+            grade = 0;
+        } else if(30000 <= money && money < 50000){
+            grade = 1;
+        } else if(50000 <= money && money < 100000){
+            grade = 2;
+        } else {
+            grade = 3;
+        }
+    }
+    
+    
 };
 
 /********************
@@ -192,13 +230,40 @@ struct FoundedNode {
  *** Inserted Node ***
  ********************/
 struct InsertedNode {
-    InsertedNode(Node* _node, int _depth) {
+    InsertedNode() {
+        node = NULL;
+        depth = 0;
+        success = false;
+    }
+    InsertedNode(Node* _node, int _depth, bool _success) {
         node = _node;
         depth = _depth;
+        success = _success;
     }
     Node* node = NULL;
     int depth = 0;
+    bool success = false;
 };
+/*******************
+ *** MoneyStatus ***
+ *******************/
+struct MoneyStatus {
+    MoneyStatus() {
+        money = 0;
+        account_id = -99999;
+    }
+    
+    MoneyStatus(int _money, int _account_id) {
+        money = _money;
+        account_id = _account_id;
+    }
+    
+    int money = 0;
+    int account_id = -99999;
+    
+};
+
+vector<MoneyStatus> moneyStatus = vector<MoneyStatus>();
 
 /**********************
  *** Red Black Tree ***
@@ -213,11 +278,12 @@ public:
     }
     
     void _coloringAfterInsert(Node *);
-    void InsertNode(Node* newNode);
+    void InsertNode(Node* newNode, bool printDepth);
     Node* FindMaxNode(Node *);
     Node* _rotateLeft(Node *);
     Node* _rotateRight(Node *);
-    Node* _insert(Node *, Node *);
+    Node* _insert(Node *, Node *, bool, int);
+    Node* _insertMoney(MoneyStatus *node, MoneyStatus *newItem, bool printDepth);
     bool _isNullCheck(Node *);
     Node* GetRoot();
     FoundedNode FindNode(int, Node*, int);
@@ -226,31 +292,56 @@ private:
     Node* nill;
 };
 
-void RedBlackTree::InsertNode(Node* newNode) {
+void RedBlackTree::InsertNode(Node* newNode, bool printDepth=false) {
     if(_isNullCheck(root)) {
         root = newNode;
     } else {
-        root = _insert(root, newNode);
+        root = _insert(root, newNode, printDepth, 0);
         _coloringAfterInsert(newNode);
     }
     root->SetBlack();
     root->setParent(nill);
 }
 
-Node* RedBlackTree::_insert(Node *node, Node *newItem) { 
+Node* RedBlackTree::_insert(Node *node, Node *newItem, bool printDepth, int _curDepth) {
     if(_isNullCheck(node)) {
         node = newItem;
-    } else if (newItem->GetKey() > node -> GetKey()) {
-        Node* child = _insert(node->getRight(), newItem);
+        if(printDepth) {
+            cout << _curDepth << " " << 1;
+        }
+    } else if(newItem->GetKey() == node -> GetKey()) { // 삽입시에 같은 회원번호는 거절
+        if(printDepth) {
+            cout << _curDepth << " " << 0 << endl;
+        }
+        return node;
+    } else if (newItem->GetKey() > node -> GetKey()) { // >
+        Node* child = _insert(node->getRight(), newItem, printDepth, _curDepth+1);
         node -> setRight(child);
         child -> setParent(node);
-    } else {
-        Node* child = _insert(node->getLeft(), newItem);
+    } else { // newItem->GetKey() < node -> GetKey() // <
+        Node* child = _insert(node->getLeft(), newItem, printDepth, _curDepth+1);
         node->setLeft(child);
         child -> setParent(node);
     }
     return node;
 }
+
+/*
+Node* RedBlackTree::_insertMoney(MoneyStatus *node, Node *newItem, bool printDepth) {
+    if(_isNullCheck(node)) {
+        node = newItem;
+    }else if (newItem->GetKey() >= node -> GetKey()) { // >=
+        Node* child = _insert(node->getRight(), newItem, printDepth, _curDepth+1);
+        node -> setRight(child);
+        child -> setParent(node);
+    } else { // newItem->GetKey() < node -> GetKey()
+        Node* child = _insert(node->getLeft(), newItem, printDepth, _curDepth+1);
+        node->setLeft(child);
+        child -> setParent(node);
+    }
+    return node;
+}
+*/
 
 void RedBlackTree::_coloringAfterInsert(Node *x) {
     // 루트 또는 블랙이면 문제없음
@@ -369,7 +460,6 @@ FoundedNode RedBlackTree::FindNode(int account_num, Node* _thisRoot, int _curDep
     
     // thisNode가 null인지 검사
     if(_isNullCheck(thisNode)) {
-        cout << "Not found!" << endl;
         return FoundedNode(nill, 0);
     } else {
         // thisNode가 찾는 노드인지
@@ -405,12 +495,14 @@ void insertUserFromFile(string);
 void insertUserFromKeyboard();
 
 /* 과제상 주어진 함수 SPEC */
-void insertUser(int _account_num, string _name, string _phone, Pos* _position, int _grade, int _monney); // I: 신규 회원가입
+void insertUser(int _account_num, string _name, string _phone, Pos* _position, int _grade, int _money, bool _printDepth = false); // I: 신규 회원가입
 void printUser(); // P: 회원정보 확인: 특정 회원의 정보 출력
 void accumulateCache(); // A: 충전: 특정 회원의 캐쉬 충전처리
 void findTop5Rank(); // F: 검색: 현재금액이 가장 높은 상위 5명의 정보 출력
+void recentChangePrint(); // R: 최근 조회: 특정 회원의 최근 금액변동내역 조회
 void buyArea(); // B: 땅 구매: 특정 회원의 땅 구매처리
 void quitProgram(); // Q: 프로그램 종료
+void updateMoneyStatus(); // 상위 5명의 정보
 
 QUERY_CASE parseCase(string);
 
@@ -418,28 +510,30 @@ RedBlackTree *rbt = new RedBlackTree(); // 레드블랙트리 생성 -> 전역 �
 
 int main(int argc, const char * argv[]) {
     
-//    insertUser(int _account_num, string _name, string _phone, Pos _position, int _grade, int _monney)
-    insertUser(1839993, "박짱구", "01093730487", new Pos(651, 787), 0, 18000);
-    insertUser(1039826, "이진구", "01091118792", new Pos(228, 891), 0, 19000);
-    insertUser(1717492, "강백호", "01020085150", new Pos(195, 112), 0, 22000);
-    insertUser(1728484, "박짱구", "01024486501", new Pos(43, 828), 0, 13000);
-    insertUser(1555645, "홍길동", "01017650037", new Pos(732, 71), 1, 45000);
-    insertUser(1250382, "조나단", "01090121196", new Pos(614, 836), 0, 4000);
-    insertUser(1151808, "조나단", "01022519193", new Pos(961, 485), 0, 5000);
-    insertUser(1802596, "박짱구", "01046717774", new Pos(886, 730), 0, 4000);
-    insertUser(1943329, "김철수", "01053284363", new Pos(603, 103), 0, 8000);
-    insertUser(1118549, "홍길동", "01036783852", new Pos(356, 463), 1, 45000);
+//    insertUser(int _account_num, string _name, string _phone, Pos _position, int _grade, int _money)
+//    insertUser(1839993, "박짱구", "01093730487", new Pos(651, 787), 0, 18000);
+//    insertUser(1039826, "이진구", "01091118792", new Pos(228, 891), 0, 19000);
+//    insertUser(1717492, "강백호", "01020085150", new Pos(195, 112), 0, 22000);
+//    insertUser(1728484, "박짱구", "01024486501", new Pos(43, 828), 0, 13000);
+//    insertUser(1555645, "홍길동", "01017650037", new Pos(732, 71), 1, 45000);
+//    insertUser(1250382, "조나단", "01090121196", new Pos(614, 836), 0, 4000);
+//    insertUser(1151808, "조나단", "01022519193", new Pos(961, 485), 0, 5000);
+//    insertUser(1802596, "박짱구", "01046717774", new Pos(886, 730), 0, 4000);
+//    insertUser(1943329, "김철수", "01053284363", new Pos(603, 103), 0, 8000);
+//    insertUser(1118549, "홍길동", "01036783852", new Pos(356, 463), 1, 45000);
     
-    /*
     bool res = inputFile();
     if (!res) { // 파일이 없으면 종료
         return 0;
     }
-    */
     
-    excecuteQuery();
+    // 중복 삽입 I 1839993 박짱구 01093730487 651 787
     
-    
+    bool isQuit = false;
+    while (!isQuit) {
+        bool res = excecuteQuery();
+        if(res) isQuit = true;
+    }
     
     return 0;
 }
@@ -494,6 +588,10 @@ bool excecuteQuery() {
             findTop5Rank();
             return false;
             break;
+        case QUERY_CASE::R:
+            recentChangePrint();
+            return false;
+            break;
         case QUERY_CASE::B:
             buyArea();
             return false;
@@ -546,7 +644,7 @@ void insertUserFromFile(string _inputStr) {
     pos -> x = x;
     pos -> y = y;
     
-    insertUser(account_num, name, phone, pos, grade, money);
+    insertUser(account_num, name, phone, pos, grade, money, true);
 }
 
 /*
@@ -579,22 +677,27 @@ void insertUserFromKeyboard() {
     pos -> y = y;
     
     // 거절구현 필요
-    insertUser(account_num, name, phone, pos, 0, 0);
+    insertUser(account_num, name, phone, pos, 0, 0, true);
 }
 
 // I: 신규 회원가입
-void insertUser(int _account_num, string _name, string _phone, Pos* _position, int _grade, int _monney) {
+void insertUser(int _account_num, string _name, string _phone, Pos* _position, int _grade, int _money, bool _printDepth) {
     Info *newInfo = new Info();
+    // 키보드에 의한 회원가입
+    // 파일에 의한 회원가입
+    
+    
+    
     newInfo -> account_num = _account_num;
     newInfo -> name = _name;
     newInfo -> phone = _phone;
     newInfo -> position = _position;
     newInfo -> grade = _grade;
-    newInfo -> money = _monney;
+    newInfo -> money = _money;
     
     // Right Left 없이 삽입
     Node *newNode = new Node(_account_num, NULL, NULL, newInfo);;
-    rbt -> InsertNode(newNode);
+    rbt -> InsertNode(newNode, _printDepth);
     
 // I: 신규 회원가입 질의를 나타내는 기호
 // K: 회원번호
@@ -631,8 +734,32 @@ void printUser() {
 }
 
 // A: 충전: 특정 회원의 캐쉬 충전처리 -> 등급이 바뀌어야 함
+/* 입력
+ A: 충전 처리 질의를 나타내는 기호
+ K: 회원번호
+ G: 충전 금액
+ */
+/* 출력
+ "D R" 또는 "Not found!"
+ D: 캐쉬 충전을 요청한 회원이 저장된 노드의 트리 내 깊이 (루트노드의 깊이는 0) R: 충전 후 해당 회원의 등급
+ */
 void accumulateCache() {
+    int account_num;
+    int newMoney;
+    cin >> account_num;
+    cin >> newMoney;
+    FoundedNode foundedNode = rbt -> FindNode(account_num, rbt -> GetRoot(), 0);
+    Node* node = foundedNode.node;
     
+    if(rbt -> _isNullCheck(node)) { // null 이 반환되면 없는 것 임.
+        cout << "Not found!" << endl;
+    } else {
+        Info* nodeInfo = node -> GetInfo();
+        nodeInfo -> setMoney(nodeInfo->money + newMoney); // 현재 돈 + 추가된 돈
+        nodeInfo -> validateGrade(); // 등급 변경
+        nodeInfo -> addToChange(newMoney);// 금액변동 내역에 추가
+        cout << foundedNode.depth << " " << node -> GetInfo() -> grade << endl;
+    }
 }
 
 // F: 검색: 현재금액이 가장 높은 상위 5명의 정보 출력
@@ -640,12 +767,97 @@ void findTop5Rank() {
     
 }
 
-// B: 땅 구매: 특정 회원의 땅 구매처리
-void buyArea() {
+
+// R: 특정 회원의 최근 금액변동내역 조회
+/* 입력
+ - 질의형식 : “R K L”
+ R: 최근 금액변동내역 조회 질의를 나타내는 기호
+ K: 회원번호
+ L: 조회할 최근 변동내역의 수
+ */
+/*
+ - 출력형식: “(조건을 만족하는 변동 금액 내역별로 한 줄에)C G” 또는 “0” 또는 “Not found!” C: 변동된 금액의 종류 (증가 : 1, 감소 : 0)
+ G: 변동된 금액
+ */
+void recentChangePrint() {
+    int account_num;
+    int how_many_print;
+    cin >> account_num >> how_many_print;
     
+    FoundedNode foundedNode = rbt -> FindNode(account_num, rbt -> GetRoot(), 0);
+    Node* node = foundedNode.node;
+    if(rbt -> _isNullCheck(node)) { // null 이 반환되면 없는 것 임.
+        cout << "Not found!" << endl;
+    } else {
+        Info* nodeInfo = node -> GetInfo();
+        vector<Changed> changed = nodeInfo -> change;
+        int count = 0;
+        if(changed.size() == 0) {
+            cout << 0 << endl;
+        } else {
+            for(int i = (int)changed.size()-1; i >= 0; i--) {
+                cout << changed[i].type << " " << changed[i].howManyMoney << endl;
+                count++;
+                if(count == how_many_print) break;
+            }
+        }
+    }
+}
+
+// B: 땅 구매: 특정 회원의 땅 구매처리
+/*
+ - 질의형식 : “B N Ax Ay M”
+ B: 땅 구매 질의를 나타내는 기호
+ N: 회원번호
+ Ax: 땅의 x 좌표
+ Ay: 땅의 y 좌표
+ M: 거래금액
+*/
+/*
+ - 출력형식: “F L D”
+ F: 땅 구매 여부 ( 승인 : 1, 거절 : 0 ) L: 구매 요청한 회원의 현재금액
+ D: 현재 땅 주인의 회원번호
+ */
+void buyArea() {
+    int account_num;
+    int xPos;
+    int yPos;
+    int price;
+    
+    cin >> account_num >> xPos >> yPos >> price;
+    Pos* pos = new Pos(xPos, yPos);
 }
 
 // Q: 프로그램 종료
 void quitProgram() {
     
 }
+
+
+// 최대 5개의 정보 출력
+bool acompare(MoneyStatus lhs, MoneyStatus rhs) { return lhs.money < rhs.money; }
+// 1000 1000 1000 1000 1000
+void updateMoneyStatus(int account_num, int money) {
+    if(moneyStatus.size() < 5) {
+        moneyStatus.push_back(MoneyStatus(account_num, money));
+        sort(moneyStatus.begin(), moneyStatus.end(), acompare);
+    } else { // 5개 초과하면
+        for(int i=0; i < 5; i++) {
+            if(moneyStatus[i].money == account_num) {
+                
+            } else if(moneyStatus[i].money >= account_num) {
+                
+            }
+        }
+        moneyStatus.erase(moneyStatus.begin());
+        moneyStatus.push_back(MoneyStatus(account_num, money));
+    }
+}
+
+/*
+ moneyStatus 언제 업데이트
+ 1. 파일에서 집어넣을때
+ 2. 땅을 팔고, 살때
+ 3. 키보드로 I(insert) 쿼리 할 때
+ 4. 충전 할 때
+ */
